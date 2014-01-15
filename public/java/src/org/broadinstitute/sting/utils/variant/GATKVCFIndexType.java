@@ -23,35 +23,17 @@
 * THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-package org.broadinstitute.sting.utils.smithwaterman;
+package org.broadinstitute.sting.utils.variant;
 
-import net.sf.samtools.Cigar;
+import org.broadinstitute.sting.commandline.EnumerationArgumentDefault;
 
 /**
- * Generic interface for SmithWaterman calculations
- *
- * This interface allows clients to use a generic SmithWaterman variable, without propagating the specific
- * implementation of SmithWaterman throughout their code:
- *
- * SmithWaterman sw = new SpecificSmithWatermanImplementation(ref, read, params)
- * sw.getCigar()
- * sw.getAlignmentStart2wrt1()
- *
- * User: depristo
- * Date: 4/26/13
- * Time: 8:24 AM
+ * Choose the Tribble indexing strategy
  */
-public interface SmithWaterman {
-
-    /**
-     * Get the cigar string for the alignment of this SmithWaterman class
-     * @return a non-null cigar
-     */
-    public Cigar getCigar();
-
-    /**
-     * Get the starting position of the read sequence in the reference sequence
-     * @return a positive integer >= 0
-     */
-    public int getAlignmentStart2wrt1();
+public enum GATKVCFIndexType {
+    @EnumerationArgumentDefault
+    DYNAMIC_SEEK,       // use DynamicIndexCreator(IndexFactory.IndexBalanceApproach.FOR_SEEK_TIME)
+    DYNAMIC_SIZE,       // use DynamicIndexCreator(IndexFactory.IndexBalanceApproach.FOR_SIZE)
+    LINEAR,             // use LinearIndexCreator()
+    INTERVAL            // use IntervalIndexCreator()
 }
