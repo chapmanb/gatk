@@ -341,21 +341,7 @@ public class GATKRunReport {
      * @return true if a report was successfully written, false otherwise
      */
     public boolean postReport(final PhoneHomeOption type) {
-        if ( type == null ) throw new IllegalArgumentException("type cannot be null");
-
-        logger.debug("Posting report of type " + type);
-        switch (type) {
-            case NO_ET: // don't do anything
-                return false;
-            case AWS:
-                wentToAWS = true;
-                return postReportToAWSS3() != null;
-            case STDOUT:
-                return postReportToStream(System.out);
-            default:
-                exceptDuringRunReport("BUG: unexpected PhoneHomeOption ");
-                return false;
-        }
+        return false;
     }
 
     // ---------------------------------------------------------------------------
