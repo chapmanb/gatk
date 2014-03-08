@@ -6,7 +6,7 @@
 set -o pipefail
 export LC_ALL=en_US.UTF-8
 
-jar="$(cd "$(dirname "$0")" && pwd -P)"/"$(basename "$0")"
+JAR_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 
 java=java
 if [ -e "$JAVA_HOME/bin/java" ]
@@ -38,6 +38,6 @@ if [ "$jvm_mem_opts" == "" ]; then
     jvm_mem_opts="$default_jvm_mem_opts"
 fi
 
-exec "$java" $jvm_mem_opts $jvm_prop_opts -jar "$jar" $pass_args
+exec "$java" $jvm_mem_opts $jvm_prop_opts -jar "$JAR_DIR/gatk-framework.jar" $pass_args
 
 exit
