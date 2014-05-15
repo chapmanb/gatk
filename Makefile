@@ -1,6 +1,6 @@
 # gatk-framework -- Create executable script
 
-version=3.0
+version=3.1-1
 
 all:
 	rm -f target/*.jar

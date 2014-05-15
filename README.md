@@ -10,6 +10,7 @@ standard GATK jar and also correctly passes java specific arguments like `-Xmx`
 
 Releases, coinciding with GATK releases, are available from:
 https://github.com/chapmanb/gatk/releases
-They contain the shell wrapper and pre-build uberjar.
+They contain the shell wrapper and pre-built uberjar with
+GATK and all dependencies.
 
 Original code and functionality from Broad: http://www.broadinstitute.org/gatk/
