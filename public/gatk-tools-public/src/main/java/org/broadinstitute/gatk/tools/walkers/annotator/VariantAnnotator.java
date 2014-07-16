@@ -165,7 +165,7 @@ public class VariantAnnotator extends RodWalker<Integer, Integer> implements Ann
      * randomly.
      */
     @Argument(fullName="expression", shortName="E", doc="One or more specific expressions to apply to variant calls", required=false)
-    protected Set<String> expressionsToUse = new ObjectOpenHashSet();
+    protected Set<String> expressionsToUse = new HashSet();
 
     /**
      * You can use the -XL argument in combination with this one to exclude specific annotations.Note that some

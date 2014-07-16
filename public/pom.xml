@@ -19,6 +19,7 @@
         <module>gatk-utils</module>
         <module>gatk-engine</module>
         <module>gatk-tools-public</module>
+        <module>gatk-package-distribution</module>
         <module>external-example</module>
         <!-- queue optionally enabled as profiles -->
     </modules>
