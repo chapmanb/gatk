@@ -25,6 +25,9 @@ for arg in "$@"; do
         '-D'*)
             jvm_prop_opts="$jvm_prop_opts $arg"
             ;;
+        '-XX'*)
+            jvm_prop_opts="$jvm_prop_opts $arg"
+            ;;
          '-Xm'*)
             jvm_mem_opts="$jvm_mem_opts $arg"
             ;;
