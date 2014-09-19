@@ -14,3 +14,7 @@ They contain the shell wrapper and pre-built uberjar with
 GATK and all dependencies.
 
 Original code and functionality from Broad: http://www.broadinstitute.org/gatk/
+
+Also includes walkers from Daniel Klevebring's GATK Repository: https://github.com/dakl/gatk
+
+- SomaticPindelFilter: Filtering of variants from reported from pindel.
