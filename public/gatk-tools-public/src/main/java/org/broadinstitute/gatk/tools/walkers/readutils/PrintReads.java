@@ -25,22 +25,25 @@
 
 package org.broadinstitute.gatk.tools.walkers.readutils;
 
+import htsjdk.samtools.SAMFileHeader;
 import htsjdk.samtools.SAMFileWriter;
 import htsjdk.samtools.SAMReadGroupRecord;
+import org.broadinstitute.gatk.engine.io.NWaySAMFileWriter;
 import org.broadinstitute.gatk.engine.walkers.*;
 import org.broadinstitute.gatk.utils.commandline.Argument;
 import org.broadinstitute.gatk.utils.commandline.Hidden;
 import org.broadinstitute.gatk.utils.commandline.Output;
 import org.broadinstitute.gatk.engine.CommandLineGATK;
 import org.broadinstitute.gatk.engine.GenomeAnalysisEngine;
-import org.broadinstitute.gatk.engine.contexts.ReferenceContext;
-import org.broadinstitute.gatk.engine.io.GATKSAMFileWriter;
+import org.broadinstitute.gatk.utils.contexts.ReferenceContext;
+import org.broadinstitute.gatk.utils.sam.GATKSAMFileWriter;
 import org.broadinstitute.gatk.engine.iterators.ReadTransformer;
 import org.broadinstitute.gatk.engine.iterators.ReadTransformersMode;
-import org.broadinstitute.gatk.engine.refdata.RefMetaDataTracker;
-import org.broadinstitute.gatk.utils.SampleUtils;
+import org.broadinstitute.gatk.utils.refdata.RefMetaDataTracker;
+import org.broadinstitute.gatk.engine.SampleUtils;
 import org.broadinstitute.gatk.utils.Utils;
 import org.broadinstitute.gatk.utils.baq.BAQ;
+import org.broadinstitute.gatk.utils.exceptions.UserException;
 import org.broadinstitute.gatk.utils.help.DocumentedGATKFeature;
 import org.broadinstitute.gatk.utils.help.HelpConstants;
 import org.broadinstitute.gatk.utils.sam.GATKSAMRecord;
@@ -49,17 +52,18 @@ import java.io.File;
 import java.util.*;
 
 /**
- * Renders, in SAM/BAM format, all reads from the input data set in the order in which they appear in the input file.
+ * Write out sequence read data (for filtering, merging, subsetting etc)
  *
  * <p>
- * PrintReads can dynamically merge the contents of multiple input BAM files, resulting
- * in merged output sorted in coordinate order.  Can also optionally filter reads based on the
- * --read_filter command line argument.
+ * PrintReads is a generic utility tool for manipulating sequencing data in SAM/BAM format. It can dynamically
+ * merge the contents of multiple input BAM files, resulting in merged output sorted in coordinate order. It can
+ * also optionally filter reads based on various read properties such as read group tags using the `--read_filter/-rf`
+ * command line argument (see documentation on read filters for more information).
  * </p>
  *
  * <p>
  * Note that when PrintReads is used as part of the Base Quality Score Recalibration workflow,
- * it takes the --BQSR engine argument, which is listed under Inherited Arguments > CommandLineGATK below.
+ * it takes the `--BQSR` engine argument, which is listed under Inherited Arguments > CommandLineGATK below.
  * </p>
  *
  * <h3>Input</h3>
@@ -72,30 +76,31 @@ import java.util.*;
  * A single processed bam file.
  * </p>
  *
- * <h3>Examples</h3>
+ * <h3>Usage examples</h3>
  * <pre>
- * java -Xmx2g -jar GenomeAnalysisTK.jar \
- *   -R ref.fasta \
+ // Prints all reads that have a mapping quality above zero
+ * java -jar GenomeAnalysisTK.jar \
  *   -T PrintReads \
- *   -o output.bam \
+ *   -R reference.fasta \
  *   -I input1.bam \
  *   -I input2.bam \
+ *   -o output.bam \
  *   --read_filter MappingQualityZero
  *
  * // Prints the first 2000 reads in the BAM file
- * java -Xmx2g -jar GenomeAnalysisTK.jar \
- *   -R ref.fasta \
+ * java -jar GenomeAnalysisTK.jar \
  *   -T PrintReads \
- *   -o output.bam \
+ *   -R reference.fasta \
  *   -I input.bam \
+ *   -o output.bam \
  *   -n 2000
  *
  * // Downsamples BAM file to 25%
- * java -Xmx2g -jar GenomeAnalysisTK.jar \
- *   -R ref.fasta \
+ * java -jar GenomeAnalysisTK.jar \
  *   -T PrintReads \
- *   -o output.bam \
+ *   -R reference.fasta \
  *   -I input.bam \
+ *   -o output.bam \
  *   -dfrac 0.25
  * </pre>
  *
@@ -128,27 +133,26 @@ public class PrintReads extends ReadWalker<GATKSAMRecord, SAMFileWriter> impleme
      * Only reads from samples listed in the provided file(s) will be included in the output.
      */
     @Argument(fullName="sample_file", shortName="sf", doc="File containing a list of samples (one per line). Can be specified multiple times", required=false)
-    public Set<File> sampleFile = new TreeSet<File>();
+    public Set<File> sampleFile = new TreeSet<>();
 
     /**
      * Only reads from the sample(s) will be included in the output.
      */
     @Argument(fullName="sample_name", shortName="sn", doc="Sample name to be included in the analysis. Can be specified multiple times.", required=false)
-    public Set<String> sampleNames = new TreeSet<String>();
+    public Set<String> sampleNames = new TreeSet<>();
 
     /**
      * Erase all extra attributes in the read but keep the read group information 
      */
-    @Argument(fullName="simplify", shortName="s", doc="Simplify all reads.", required=false)
+    @Argument(fullName="simplify", shortName="s", doc="Simplify all reads", required=false)
     public boolean simplifyReads = false;
 
     @Hidden
-    @Argument(fullName = "no_pg_tag", shortName = "npt", doc ="", required = false)
+    @Argument(fullName = "no_pg_tag", shortName = "npt", doc ="Don't output a program tag", required = false)
     public boolean NO_PG_TAG = false;
 
     List<ReadTransformer> readTransformers = Collections.emptyList();
-    private TreeSet<String> samplesToChoose = new TreeSet<String>();
-    private boolean SAMPLES_SPECIFIED = false;
+    private Set<String> readGroupsToKeep = Collections.emptySet();
 
     public static final String PROGRAM_RECORD_NAME = "GATK PrintReads";   // The name that will go in the @PG tag
     
@@ -161,12 +165,16 @@ public class PrintReads extends ReadWalker<GATKSAMRecord, SAMFileWriter> impleme
     public void initialize() {
         final GenomeAnalysisEngine toolkit = getToolkit();
 
-        if  ( platform != null )
-            platform = platform.toUpperCase();
+        if ( toolkit != null )
+            readTransformers = toolkit.getReadTransformers();
 
-        if ( getToolkit() != null )
-            readTransformers = getToolkit().getReadTransformers();
-
+        //Sample names are case-insensitive
+        final TreeSet<String> samplesToChoose = new TreeSet<>(new Comparator<String>() {
+            @Override
+            public int compare(String a, String b) {
+                return a.compareToIgnoreCase(b);
+            }
+        });
         Collection<String> samplesFromFile;
         if (!sampleFile.isEmpty())  {
             samplesFromFile = SampleUtils.getSamplesFromFiles(sampleFile);
@@ -176,15 +184,24 @@ public class PrintReads extends ReadWalker<GATKSAMRecord, SAMFileWriter> impleme
         if (!sampleNames.isEmpty())
             samplesToChoose.addAll(sampleNames);
 
-        if(!samplesToChoose.isEmpty()) {
-            SAMPLES_SPECIFIED = true;
-        }
+        random = Utils.getRandomGenerator();
 
-        random = GenomeAnalysisEngine.getRandomGenerator();
+        if (toolkit != null) {
+            final SAMFileHeader outputHeader = toolkit.getSAMFileHeader().clone();
+            readGroupsToKeep = determineReadGroupsOfInterest(outputHeader, samplesToChoose);
 
-        final boolean preSorted = true;
-        if (getToolkit() != null && getToolkit().getArguments().BQSR_RECAL_FILE != null && !NO_PG_TAG ) {
-            Utils.setupWriter(out, toolkit, toolkit.getSAMFileHeader(), preSorted, this, PROGRAM_RECORD_NAME);
+            //If some read groups are to be excluded, remove them from the output header
+            pruneReadGroups(outputHeader);
+
+            //Add the program record (if appropriate) and set up the writer
+            final boolean preSorted = true;
+            if (toolkit.getArguments().BQSR_RECAL_FILE != null && !NO_PG_TAG ) {
+                NWaySAMFileWriter.setupWriter(out, toolkit, outputHeader, preSorted, this, PROGRAM_RECORD_NAME);
+            } else {
+                out.writeHeader(outputHeader);
+                out.setPresorted(preSorted);
+            }
+
         }
 
     }
@@ -197,31 +214,12 @@ public class PrintReads extends ReadWalker<GATKSAMRecord, SAMFileWriter> impleme
      * @return true if the read passes the filter, false if it doesn't
      */
     public boolean filter(ReferenceContext ref, GATKSAMRecord read) {
-        // check the read group
-        if  ( readGroup != null ) {
-            SAMReadGroupRecord myReadGroup = read.getReadGroup();
-            if ( myReadGroup == null || !readGroup.equals(myReadGroup.getReadGroupId()) )
+        // check that the read belongs to an RG that we need to keep
+        if (!readGroupsToKeep.isEmpty()) {
+            final SAMReadGroupRecord readGroup = read.getReadGroup();
+            if (!readGroupsToKeep.contains(readGroup.getReadGroupId()))
                 return false;
         }
-
-        // check the platform
-        if  ( platform != null ) {
-            SAMReadGroupRecord readGroup = read.getReadGroup();
-            if ( readGroup == null )
-                return false;
-
-            Object readPlatformAttr = readGroup.getAttribute("PL");
-            if ( readPlatformAttr == null || !readPlatformAttr.toString().toUpperCase().contains(platform))
-                return false;
-        }
-        if (SAMPLES_SPECIFIED )  {
-            // user specified samples to select
-            // todo - should be case-agnostic  but for simplicity and speed this is ignored.
-            // todo - can check at initialization intersection of requested samples and samples in BAM header to further speedup.
-            if (!samplesToChoose.contains(read.getReadGroup().getSample()))
-                return false;
-        }
-
 
         // check if we've reached the output limit
         if ( nReadsToPrint == 0 ) {
@@ -273,5 +271,49 @@ public class PrintReads extends ReadWalker<GATKSAMRecord, SAMFileWriter> impleme
     public SAMFileWriter reduce( GATKSAMRecord read, SAMFileWriter output ) {
         output.addAlignment(read);
         return output;
+    }
+
+    /**
+     * Determines the list of read groups that meet the user's criteria for inclusion (based on id, platform, or sample)
+     * @param header         the merged header for all input files
+     * @param samplesToKeep  the list of specific samples specified by the user
+     * @return               a Set of read group IDs that meet the user's criteria, empty if all RGs should be included
+     */
+    private Set<String> determineReadGroupsOfInterest(final SAMFileHeader header, final Set<String> samplesToKeep) {
+        //If no filter options that use read group information have been supplied, exit early
+        if (platform == null && readGroup == null && samplesToKeep.isEmpty())
+            return Collections.emptySet();
+
+        if  ( platform != null )
+            platform = platform.toUpperCase();
+
+        final Set<String> result = new HashSet<>();
+        for (final SAMReadGroupRecord rg : header.getReadGroups()) {
+            // To be eligible for output, a read group must:
+            //  NOT have an id that is blacklisted on the command line (note that String.equals(null) is false)
+            //  AND NOT have a platform that contains the blacklisted platform from the command line
+            //  AND have a sample that is whitelisted on the command line
+            if (!rg.getReadGroupId().equals(readGroup) &&
+                    (platform == null || !rg.getPlatform().toUpperCase().contains(platform)) &&
+                    (samplesToKeep.isEmpty() || samplesToKeep.contains(rg.getSample())))
+                result.add(rg.getReadGroupId());
+        }
+
+        if (result.isEmpty())
+            throw new UserException.BadArgumentValue("-sn/-sf/-platform/-readGroup", "No read groups remain after pruning based on the supplied parameters");
+
+        return result;
+    }
+
+    private void pruneReadGroups(final SAMFileHeader header) {
+        if (readGroupsToKeep.isEmpty())
+            return;
+
+        final List<SAMReadGroupRecord> readGroups = new ArrayList<>();
+        for (final SAMReadGroupRecord rg : header.getReadGroups()) {
+            if (readGroupsToKeep.contains(rg.getReadGroupId()))
+                readGroups.add(rg);
+        }
+        header.setReadGroups(readGroups);
     }
 }

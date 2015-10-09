@@ -46,6 +46,9 @@ class QGraphSettings {
   @Argument(fullName="qsub", shortName="qsub", doc="Equivalent to -jobRunner GridEngine", required=false)
   var qsub = false
 
+  @Argument(fullName="qsub-broad", shortName="qsub-broad", doc="Equivalent to -qsub, but uses GridEngine parameters specific to the Broad GridEngine cluster", required=false)
+  var qsubBroad = false
+
   @Argument(fullName="status",shortName="status",doc="Get status of jobs for the qscript",required=false)
   var getStatus = false
 
@@ -74,7 +77,7 @@ class QGraphSettings {
   var jobReportFile: String = _
 
   @Advanced
-  @Argument(fullName="disableJobReport", shortName="disabpleJobReport", doc="If provided, we will not create a job report", required=false)
+  @Argument(fullName="disableJobReport", shortName="disableJobReport", doc="If provided, we will not create a job report", required=false)
   var disableJobReport: Boolean = false
 
   @ArgumentCollection

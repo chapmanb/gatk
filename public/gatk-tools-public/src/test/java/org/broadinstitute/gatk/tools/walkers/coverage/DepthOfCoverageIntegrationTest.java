@@ -27,8 +27,12 @@ package org.broadinstitute.gatk.tools.walkers.coverage;
 
 import org.broadinstitute.gatk.engine.walkers.WalkerTest;
 import org.testng.annotations.Test;
+import org.testng.Assert;
+
+import org.apache.commons.io.FileUtils;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -142,6 +146,33 @@ public class DepthOfCoverageIntegrationTest extends WalkerTest {
         execute("testAdjacentIntervals", spec);
     }
 
+
+    @Test
+    public void testSortOrder() {
+        // This test came from a user who discovered that the columns and data in the gene_summary file didn't align for the specific
+        // sample names in these files.
+        String[] intervals = {"1:1600000-1700000"};
+        String[] bams = {privateTestDir+"badHashName1.bam", privateTestDir+"badHashName2.bam"};
+
+        String cmd = buildRootCmd(b37KGReference, new ArrayList<String>(Arrays.asList(bams)), new ArrayList<String>(Arrays.asList(intervals))) +
+                " -geneList "+privateTestDir+"refGene_CDK11B.txt";
+        WalkerTestSpec spec = new WalkerTestSpec(cmd, 0, new ArrayList<String>());
+
+        File baseOutputFile = WalkerTest.createTempFile("depthofcoveragesortorder", ".tmp");
+        spec.setOutputFileLocation(baseOutputFile);
+
+        spec.addAuxFile("a148e50f9db207adfd5d5f0f29eb54d8", baseOutputFile);
+        spec.addAuxFile("7ccd5193a3c035d1cc856cbc89e3daf4", createTempFileFromBase(baseOutputFile.getAbsolutePath()+".sample_cumulative_coverage_counts"));
+        spec.addAuxFile("2efe59c20721ce61bc5b334a26d11720", createTempFileFromBase(baseOutputFile.getAbsolutePath()+".sample_cumulative_coverage_proportions"));
+        spec.addAuxFile("9194cec953e0fe0b84a681f9bb63ffbe", createTempFileFromBase(baseOutputFile.getAbsolutePath()+".sample_gene_summary"));
+        spec.addAuxFile("cf62d95ec1f459fbbe35370c3f0ca481", createTempFileFromBase(baseOutputFile.getAbsolutePath()+".sample_interval_statistics"));
+        spec.addAuxFile("b4fcb739b7f9e309e38a7d5e7e4ebb9f", createTempFileFromBase(baseOutputFile.getAbsolutePath()+".sample_interval_summary"));
+        spec.addAuxFile("6bf63f9c62071e850c6f0b6356fb63eb", createTempFileFromBase(baseOutputFile.getAbsolutePath()+".sample_statistics"));
+        spec.addAuxFile("e53e6a494bf1cf817762b74917c6f0c9", createTempFileFromBase(baseOutputFile.getAbsolutePath()+".sample_summary"));
+
+        execute("testSortOrder", spec);
+    }
+
     public void testRefNHandling(boolean includeNs, final String md5) {
         String command = "-R " + b37KGReference + " -L 20:26,319,565-26,319,575 -I " + validationDataLocation + "NA12878.HiSeq.WGS.bwa.cleaned.recal.hg19.20.bam -T DepthOfCoverage -baseCounts --omitIntervalStatistics --omitLocusTable --omitPerSampleStats -o %s";
         if ( includeNs ) command += " --includeRefNSites";
@@ -151,4 +182,33 @@ public class DepthOfCoverageIntegrationTest extends WalkerTest {
 
     @Test public void testRefNWithNs() { testRefNHandling(true, "24cd2da2e4323ce6fd76217ba6dc2834"); }
     @Test public void testRefNWithoutNs() { testRefNHandling(false, "4fc0f1a2e968f777d693abcefd4fb7af"); }
+
+
+    @Test
+    public void testIncompatibleArgs() throws IOException {
+        final String[] intervals = {"/humgen/gsa-hpprojects/GATK/data/Validation_Data/fhs_jhs_30_targts.interval_list"};
+        final String[] bams = {"/humgen/gsa-hpprojects/GATK/data/Validation_Data/FHS_indexed_subset.bam"};
+        final String refSeqGeneListFile = privateTestDir + "geneTrackHg18Chr1Interval.refSeq";
+
+        final String logFileName = new String("testIncompatibleArgs.log");
+        final String cmd = buildRootCmd(hg18Reference,new ArrayList<>(Arrays.asList(bams)),new ArrayList<>(Arrays.asList(intervals))) + " --omitIntervalStatistics --calculateCoverageOverGenes " + refSeqGeneListFile + " -log " + logFileName;
+        final WalkerTestSpec spec = new WalkerTestSpec(cmd,0, new ArrayList<String>());
+
+        // output file
+        final File outputFile = createTempFile("DepthOfCoverageIncompatibleArgs",".tmp");
+        spec.setOutputFileLocation(outputFile);
+
+        execute("testIncompatibleArgs",spec);
+
+        // check that only the sample gene summary output file is empty
+        Assert.assertEquals( createTempFileFromBase(outputFile.getAbsolutePath()+".sample_gene_summary").length(), 0 );
+        Assert.assertNotEquals( createTempFileFromBase(outputFile.getAbsolutePath()+".sample_cumulative_coverage_counts").length(), 0 );
+        Assert.assertNotEquals( createTempFileFromBase(outputFile.getAbsolutePath()+".sample_cumulative_coverage_proportions").length(), 0 );
+        Assert.assertNotEquals( createTempFileFromBase(outputFile.getAbsolutePath()+".sample_statistics").length(), 0 );
+        Assert.assertNotEquals( createTempFileFromBase(outputFile.getAbsolutePath()+".sample_summary").length(), 0 );
+
+        // check the log for the warning message
+        File file = new File(logFileName);
+        Assert.assertTrue(FileUtils.readFileToString(file).contains(DepthOfCoverage.incompatibleArgsMsg()));
+    }
 }

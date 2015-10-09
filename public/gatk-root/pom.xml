@@ -12,7 +12,7 @@
 
     <groupId>org.broadinstitute.gatk</groupId>
     <artifactId>gatk-root</artifactId>
-    <version>3.2</version>
+    <version>3.5-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>GATK Root</name>
 
@@ -44,8 +44,8 @@
         <test.listeners>org.testng.reporters.FailedReporter,org.testng.reporters.JUnitXMLReporter,org.broadinstitute.gatk.utils.TestNGTestTransformer,org.broadinstitute.gatk.utils.GATKTextReporter,org.uncommons.reportng.HTMLReporter</test.listeners>
 
         <!-- Version numbers for picard and htsjdk -->
-        <htsjdk.version>1.112.1452</htsjdk.version>
-        <picard.version>1.112.1452</picard.version>
+        <htsjdk.version>1.134</htsjdk.version>
+        <picard.version>1.133</picard.version>
     </properties>
 
     <!-- Dependency configuration (versions, etc.) -->
@@ -67,7 +67,7 @@
                 <version>1.0-r139</version>
             </dependency>
             <dependency>
-                <groupId>samtools</groupId>
+                <groupId>com.github.samtools</groupId>
                 <artifactId>htsjdk</artifactId>
                 <version>${htsjdk.version}</version>
                 <exclusions>
@@ -82,7 +82,7 @@
                 </exclusions>
             </dependency>
             <dependency>
-                <groupId>picard</groupId>
+                <groupId>com.github.broadinstitute</groupId>
                 <artifactId>picard</artifactId>
                 <version>${picard.version}</version>
             </dependency>
@@ -130,10 +130,16 @@
                 <artifactId>reflections</artifactId>
                 <version>0.9.9-RC1</version>
             </dependency>
+            <!-- slf4j bindings must only be at the package level: http://www.slf4j.org/manual.html -->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>1.6.1</version>
+            </dependency>
             <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-log4j12</artifactId>
-                <version>1.6.1</version>
+                <version>1.7.5</version>
             </dependency>
             <dependency>
                 <groupId>gov.nist.math</groupId>
@@ -401,8 +407,10 @@
                             </property>
                         </properties>
                         <systemPropertyVariables>
+                            <gatkdir>${gatk.basedir}</gatkdir>
                             <clover.pertest.coverage>diff</clover.pertest.coverage>
                             <java.awt.headless>true</java.awt.headless>
+                            <queuetest.run>${gatk.queuetests.run}</queuetest.run>
                             <java.io.tmpdir>${java.io.tmpdir}</java.io.tmpdir>
                         </systemPropertyVariables>
                     </configuration>
@@ -424,6 +432,9 @@
                                 <includes>
                                     <include>**/*UnitTest.class</include>
                                 </includes>
+                                <systemPropertyVariables>
+                                    <testType>unit</testType>
+                                </systemPropertyVariables>
                             </configuration>
                         </execution>
                     </executions>
@@ -451,10 +462,10 @@
                             </property>
                         </properties>
                         <systemPropertyVariables>
+                            <gatkdir>${gatk.basedir}</gatkdir>
                             <clover.pertest.coverage>diff</clover.pertest.coverage>
                             <java.awt.headless>true</java.awt.headless>
-                            <!-- TODO: Fix BaseTest to not error out if this property is missing. -->
-                            <pipeline.run>${gatk.queuetests.run}</pipeline.run>
+                            <queuetest.run>${gatk.queuetests.run}</queuetest.run>
                             <java.io.tmpdir>${java.io.tmpdir}</java.io.tmpdir>
                         </systemPropertyVariables>
                     </configuration>
@@ -474,6 +485,9 @@
                                 <includes>
                                     <include>**/*IntegrationTest.class</include>
                                 </includes>
+                                <systemPropertyVariables>
+                                    <testType>integration</testType>
+                                </systemPropertyVariables>
                             </configuration>
                         </execution>
                         <execution>
@@ -491,6 +505,9 @@
                                 <includes>
                                     <include>**/*QueueTest.class</include>
                                 </includes>
+                                <systemPropertyVariables>
+                                    <testType>queue</testType>
+                                </systemPropertyVariables>
                             </configuration>
                         </execution>
                         <execution>
@@ -507,6 +524,9 @@
                                 <includes>
                                     <include>**/*LargeScaleTest.class</include>
                                 </includes>
+                                <systemPropertyVariables>
+                                    <testType>largescale</testType>
+                                </systemPropertyVariables>
                             </configuration>
                         </execution>
                         <execution>
@@ -523,6 +543,9 @@
                                 <includes>
                                     <include>**/*KnowledgeBaseTest.class</include>
                                 </includes>
+                                <systemPropertyVariables>
+                                    <testType>knowledgebasetests</testType>
+                                </systemPropertyVariables>
                             </configuration>
                         </execution>
                     </executions>
@@ -647,6 +670,38 @@
                             <goal>sort</goal>
                         </goals>
                         <phase>verify</phase>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-install-plugin</artifactId>
+                <executions>
+                    <!--
+                    The pom for com.pyx4j:maven-junction-plugin:1.0.3 points to
+                    sysinternals:junction:1.04:exe. This file is only hosted in the repo
+                    http://www.pyx4me.com/maven2, and the website keeps going down.
+
+                    This file is only used on windows, but the maven-plugin devs never finished
+                    implementing *plugin* dependency exclusions: http://jira.codehaus.org/browse/MNG-2163
+
+                    Until someone updates or replaces this 2007 plugin with a new plugin using Java 7's Files class,
+                    for now we copy over the artifact just in case the website is unavailable.
+
+                    See also: http://docs.oracle.com/javase/7/docs/api/java/nio/file/Files.html#createSymbolicLink(java.nio.file.Path,%20java.nio.file.Path,%20java.nio.file.attribute.FileAttribute...)
+                    -->
+                    <execution>
+                        <id>install-sysinternals-junction</id>
+                        <goals>
+                            <goal>install-file</goal>
+                        </goals>
+                        <phase>initialize</phase>
+                        <inherited>false</inherited>
+                        <configuration>
+                            <file>${gatk.basedir}/public/repo/sysinternals/junction/1.04/junction-1.04.exe</file>
+                            <pomFile>${gatk.basedir}/public/repo/sysinternals/junction/1.04/junction-1.04.pom</pomFile>
+                            <packaging>exe</packaging>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

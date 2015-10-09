@@ -35,11 +35,17 @@ import org.broadinstitute.gatk.utils.MD5DB
 import org.broadinstitute.gatk.queue.{QScript, QCommandLine}
 import org.broadinstitute.gatk.queue.util.Logging
 import java.io.{FilenameFilter, File}
-import org.broadinstitute.gatk.engine.report.GATKReport
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.WildcardFileFilter
+import org.broadinstitute.gatk.utils.report.GATKReport
 
 object QueueTest extends BaseTest with Logging {
+
+  private final val qscriptsSrcDir = "src/main/qscripts/"
+  private final val qscriptsPackageDir = qscriptsSrcDir + "org/broadinstitute/gatk/queue/qscripts/"
+  final val publicQScriptsPackageDir = BaseTest.gatkDirectory + "public/gatk-queue-extensions-public/" + qscriptsPackageDir
+  final val protectedQScriptsPackageDir = BaseTest.gatkDirectory + "protected/gatk-queue-extensions-distribution/" + qscriptsPackageDir
+  final val privateQScriptsPackageDir = BaseTest.gatkDirectory + "private/gatk-queue-extensions-internal/" + qscriptsPackageDir
 
   private val validationReportsDataLocation = "/humgen/gsa-hpprojects/GATK/validationreports/submitted/"
   private val md5DB = new MD5DB()
@@ -47,12 +53,12 @@ object QueueTest extends BaseTest with Logging {
   /**
    * All the job runners configured to run QueueTests at The Broad.
    */
-  final val allJobRunners = Seq("Lsf706", "GridEngine", "Shell")
+  final val allJobRunners = Seq("GridEngine", "Shell")
 
   /**
    * The default job runners to run.
    */
-  final val defaultJobRunners = Seq("Lsf706", "GridEngine")
+  final val defaultJobRunners = Seq("GridEngine")
 
   /**
    * Returns the top level output path to this test.

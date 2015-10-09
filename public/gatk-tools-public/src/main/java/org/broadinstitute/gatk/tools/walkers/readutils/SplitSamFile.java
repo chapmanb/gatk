@@ -30,10 +30,13 @@ import htsjdk.samtools.SAMFileWriter;
 import htsjdk.samtools.SAMReadGroupRecord;
 import htsjdk.samtools.SAMRecord;
 import org.apache.log4j.Logger;
+import org.broadinstitute.gatk.engine.io.DirectOutputTracker;
+import org.broadinstitute.gatk.engine.io.OutputTracker;
+import org.broadinstitute.gatk.engine.io.stubs.SAMFileWriterStub;
 import org.broadinstitute.gatk.utils.commandline.Argument;
 import org.broadinstitute.gatk.engine.CommandLineGATK;
-import org.broadinstitute.gatk.engine.contexts.ReferenceContext;
-import org.broadinstitute.gatk.engine.refdata.RefMetaDataTracker;
+import org.broadinstitute.gatk.utils.contexts.ReferenceContext;
+import org.broadinstitute.gatk.utils.refdata.RefMetaDataTracker;
 import org.broadinstitute.gatk.engine.walkers.DataSource;
 import org.broadinstitute.gatk.engine.walkers.ReadWalker;
 import org.broadinstitute.gatk.engine.walkers.Requires;
@@ -41,7 +44,6 @@ import org.broadinstitute.gatk.engine.walkers.WalkerName;
 import org.broadinstitute.gatk.utils.help.DocumentedGATKFeature;
 import org.broadinstitute.gatk.utils.help.HelpConstants;
 import org.broadinstitute.gatk.utils.sam.GATKSAMRecord;
-import org.broadinstitute.gatk.utils.sam.ReadUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -49,8 +51,29 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Divides the input data set into separate BAM files, one for each sample in the input data set.  The split
- * files are named concatenating the sample name to the end of the provided outputRoot command-line argument.
+ * Split a BAM file by sample
+ *
+ * <p>This tool divides the input data set into separate BAM files, one for each sample in the input data set. The split
+ * files are named by concatenating the sample name to the end of the provided outputRoot command-line argument.</p>
+ *
+ * <h3>Input</h3>
+ * <p>
+ * A single bam file.
+ * </p>
+ *
+ * <h3>Output</h3>
+ * <p>
+ * A separate bam file for each sample.
+ * </p>
+ *
+ * <h3>Usage example</h3>
+ * <pre>
+ * java -jar GenomeAnalysisTK.jar \
+ *   -T SplitSamFile \
+ *   -R reference.fasta \
+ *   -I input.bam \
+ *   --outputRoot myproject_
+ * </pre>
  */
 @DocumentedGATKFeature( groupName = HelpConstants.DOCS_CAT_DATA, extraDocs = {CommandLineGATK.class} )
 @WalkerName("SplitSamFile")
@@ -59,16 +82,15 @@ public class SplitSamFile extends ReadWalker<SAMRecord, Map<String, SAMFileWrite
     @Argument(fullName="outputRoot", doc="output BAM file", required=false)
     public String outputRoot = "";
 
-    @Argument(fullName = "bam_compression", shortName = "compress", doc = "Compression level to use for writing BAM files", required = false)
-    public Integer BAMcompression = 5;    
+    private static final Logger logger = Logger.getLogger(SplitSamFile.class);
+    private static final String VERSION = "0.0.1";
 
-    private static Logger logger = Logger.getLogger(SplitSamFile.class);
-    private static String VERSION = "0.0.1";
-
+    @Override
     public void initialize() {
         logger.info("SplitSamFile version: " + VERSION);
     }
 
+    @Override
     public SAMRecord map(ReferenceContext ref, GATKSAMRecord read, RefMetaDataTracker metaDataTracker) {
         return read;
     }
@@ -78,37 +100,42 @@ public class SplitSamFile extends ReadWalker<SAMRecord, Map<String, SAMFileWrite
     // Standard I/O routines
     //
     // --------------------------------------------------------------------------------------------------------------
+    @Override
     public void onTraversalDone(Map<String, SAMFileWriter> outputs) {
         for ( SAMFileWriter output : outputs.values() ) {
             output.close();
         }
     }
 
+    @Override
     public Map<String, SAMFileWriter> reduceInit() {
-        HashMap<String, SAMFileHeader> headers = new HashMap<String, SAMFileHeader>();
+        HashMap<String, SAMFileHeader> headers = new HashMap<>();
         for ( SAMReadGroupRecord readGroup : this.getToolkit().getSAMFileHeader().getReadGroups()) {
             final String sample = readGroup.getSample();
             if ( ! headers.containsKey(sample) ) {
                 SAMFileHeader header = duplicateSAMFileHeader(this.getToolkit().getSAMFileHeader());
                 logger.debug(String.format("Creating BAM header for sample %s", sample));
-                ArrayList<SAMReadGroupRecord> readGroups = new ArrayList<SAMReadGroupRecord>();
+                ArrayList<SAMReadGroupRecord> readGroups = new ArrayList<>();
                 header.setReadGroups(readGroups);
                 headers.put(sample, header);
             }
 
             SAMFileHeader header = headers.get(sample);
-            List<SAMReadGroupRecord> newReadGroups = new ArrayList<SAMReadGroupRecord>(header.getReadGroups());
+            List<SAMReadGroupRecord> newReadGroups = new ArrayList<>(header.getReadGroups());
             newReadGroups.add(readGroup);
             header.setReadGroups(newReadGroups);
         }
 
-        HashMap<String, SAMFileWriter> outputs = new HashMap<String, SAMFileWriter>();
+        HashMap<String, SAMFileWriter> outputs = new HashMap<>();
+        final OutputTracker outputTracker = new DirectOutputTracker();
         for ( Map.Entry<String, SAMFileHeader> elt : headers.entrySet() ) {
             final String sample = elt.getKey();
             final String filename = outputRoot + sample + ".bam";
             logger.info(String.format("Creating BAM output file %s for sample %s", filename, sample));
-            SAMFileWriter output = ReadUtils.createSAMFileWriterWithCompression(elt.getValue(), true, filename, BAMcompression);
+
+            final SAMFileWriter output = SAMFileWriterStub.createSAMFileWriter(filename, getToolkit(), elt.getValue());
             outputs.put(sample, output);
+            outputTracker.addOutput( (SAMFileWriterStub) output);
         }
 
         return outputs;
@@ -117,6 +144,7 @@ public class SplitSamFile extends ReadWalker<SAMRecord, Map<String, SAMFileWrite
     /**
      * Write out the read
      */
+    @Override
     public Map<String, SAMFileWriter> reduce(SAMRecord read, Map<String, SAMFileWriter> outputs) {
         final String sample = read.getReadGroup().getSample();
         SAMFileWriter output = outputs.get(sample);

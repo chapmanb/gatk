@@ -32,9 +32,9 @@ import htsjdk.variant.variantcontext.GenotypeBuilder;
 import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.vcf.VCFFormatHeaderLine;
 import htsjdk.variant.vcf.VCFHeaderLineType;
-import org.broadinstitute.gatk.engine.contexts.AlignmentContext;
-import org.broadinstitute.gatk.engine.contexts.ReferenceContext;
-import org.broadinstitute.gatk.engine.refdata.RefMetaDataTracker;
+import org.broadinstitute.gatk.utils.contexts.AlignmentContext;
+import org.broadinstitute.gatk.utils.contexts.ReferenceContext;
+import org.broadinstitute.gatk.utils.refdata.RefMetaDataTracker;
 import org.broadinstitute.gatk.tools.walkers.annotator.interfaces.AnnotatorCompatible;
 import org.broadinstitute.gatk.tools.walkers.annotator.interfaces.ExperimentalAnnotation;
 import org.broadinstitute.gatk.tools.walkers.annotator.interfaces.GenotypeAnnotation;
@@ -43,6 +43,8 @@ import org.broadinstitute.gatk.utils.genotyper.PerReadAlleleLikelihoodMap;
 import org.broadinstitute.gatk.utils.pileup.PileupElement;
 import org.broadinstitute.gatk.utils.pileup.ReadBackedPileup;
 import org.broadinstitute.gatk.utils.sam.GATKSAMRecord;
+import org.broadinstitute.gatk.utils.variant.GATKVCFConstants;
+import org.broadinstitute.gatk.utils.variant.GATKVCFHeaderLines;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -55,11 +57,22 @@ import java.util.Set;
 /**
  * Allele balance per sample
  *
- * <p>The allele balance is the fraction of ref bases over ref + alt bases.</p>
- *
+ * <p> This is an experimental annotation that attempts to estimate whether the data supporting a heterozygous genotype call fits allelic ratio expectations, or whether there might be some bias in the data.</p>
+ * <h3>Calculation</h3>
+ * <p> $$ AB = \frac{# ALT alleles}{total # alleles} $$ </p>
+ * <p> Ideally, the value of AB should be close to 0.5, so half of the alleles support the ref allele and half of the alleles support the alt allele. Divergence from the expected ratio may indicate that there is some bias in favor of one allele. Note the caveats below regarding cancer and RNAseq analysis. </p>
  * <h3>Caveats</h3>
- * <p>Note that this annotation will only work properly for biallelic samples that are called as heterozygous.</p>
- * <h4>This is an experimental annotation. As such, it is unsupported; we do not make any guarantees that it will work properly, and you use it at your own risk.</h4>
+ * <ul>
+ *     <li>This annotation will only work properly for biallelic heterozygous calls.</li>
+ *     <li>This annotation cannot currently be calculated for indels.</li>
+ *     <li>The reasoning underlying this annotation only applies to germline variants in DNA sequencing data. In somatic/cancer analysis, divergent ratios are expected due to tumor heterogeneity. In RNAseq analysis, divergent ratios may indicate differential allele expression.</li>
+ *     <li>As stated above, this annotation is experimental and should be interpreted with caution as we cannot guarantee that it is appropriate. Basically, use it at your own risk.</li>
+ * </ul>
+ * <h3>Related annotations</h3>
+ * <ul>
+ *     <li><b><a href="https://www.broadinstitute.org/gatk/guide/tooldocs/org_broadinstitute_gatk_tools_walkers_annotator_AlleleBalance.php">AlleleBallance</a></b> is a generalization of this annotation over all samples.</li>
+ *     <li><b><a href="https://www.broadinstitute.org/gatk/guide/tooldocs/org_broadinstitute_gatk_tools_walkers_annotator_DepthPerAlleleBySample.php">DepthPerAlleleBySample</a></b> calculates depth of coverage for each allele per sample.</li>
+ * </ul>
  */
 public class AlleleBalanceBySample extends GenotypeAnnotation implements ExperimentalAnnotation {
 
@@ -81,7 +94,7 @@ public class AlleleBalanceBySample extends GenotypeAnnotation implements Experim
         // and isBiallelic() while ignoring the <NON_REF> allele
         boolean biallelicSNP = vc.isSNP() && vc.isBiallelic();
 
-        if(vc.hasAllele(GVCF_NONREF)){
+        if(vc.hasAllele(GATKVCFConstants.NON_REF_SYMBOLIC_ALLELE)){
             // If we have the GVCF <NON_REF> allele, then the SNP is biallelic
             // iff there are 3 alleles and both the reference and first alt
             // allele are length 1.
@@ -106,8 +119,6 @@ public class AlleleBalanceBySample extends GenotypeAnnotation implements Experim
 
         gb.attribute(getKeyNames().get(0), Double.valueOf(String.format("%.2f", ratio)));
     }
-
-    private static final Allele GVCF_NONREF = Allele.create("<NON_REF>", false);
 
     private Double annotateWithPileup(final AlignmentContext stratifiedContext, final VariantContext vc) {
 
@@ -164,7 +175,7 @@ public class AlleleBalanceBySample extends GenotypeAnnotation implements Experim
 
     }
 
-    public List<String> getKeyNames() { return Arrays.asList("AB"); }
+    public List<String> getKeyNames() { return Arrays.asList(GATKVCFConstants.ALLELE_BALANCE_KEY); }
 
-    public List<VCFFormatHeaderLine> getDescriptions() { return Arrays.asList(new VCFFormatHeaderLine(getKeyNames().get(0), 1, VCFHeaderLineType.Float, "Allele balance for each het genotype")); }
+    public List<VCFFormatHeaderLine> getDescriptions() { return Arrays.asList(GATKVCFHeaderLines.getFormatLine(getKeyNames().get(0))); }
 }
