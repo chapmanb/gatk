@@ -7,9 +7,9 @@ all:
 	rm -f target/*.jar
 	rm -f public/gatk-package-distribution/dependency-reduced-pom.xml
 	rm -rf public/gatk-package-distribution/target
-	rm -f public/gatk-tools-public/target/*.jar
-	rm -f public/gatk-utils/target/*.jar
-	rm -f public/gatk-engine/target/*.jar
+	rm -rf public/gatk-tools-public/target
+	rm -rf public/gatk-utils/target
+	rm -rf public/gatk-engine/target
 	mvn verify
 	rm -rf gatk-framework-${version}
 	mkdir -p gatk-framework-${version}
