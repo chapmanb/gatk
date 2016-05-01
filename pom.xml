@@ -13,7 +13,7 @@
     <parent>
         <groupId>org.broadinstitute.gatk</groupId>
         <artifactId>gatk-root</artifactId>
-        <version>3.5-SNAPSHOT</version>
+        <version>3.5</version>
         <relativePath>public/gatk-root</relativePath>
     </parent>
 
@@ -161,6 +161,7 @@
                             <configuration>
                                 <outputDirectory>${gatk.executable.directory}/lib</outputDirectory>
                                 <includeScope>runtime</includeScope>
+                                <useBaseVersion>false</useBaseVersion>
                             </configuration>
                         </execution>
                     </executions>
