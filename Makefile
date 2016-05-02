@@ -1,7 +1,7 @@
 # gatk-framework -- Create executable script
 
-version_base=3.4
-version=${version_base}-46
+version_base=3.5
+version=${version_base}-21
 
 all:
 	rm -f target/*.jar
@@ -10,7 +10,8 @@ all:
 	rm -rf public/gatk-tools-public/target
 	rm -rf public/gatk-utils/target
 	rm -rf public/gatk-engine/target
-	mvn verify
+	mvn clean
+	mvn -e verify
 	rm -rf gatk-framework-${version}
 	mkdir -p gatk-framework-${version}
 	cp bin/gatk-framework gatk-framework-${version}
