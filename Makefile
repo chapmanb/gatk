@@ -1,7 +1,9 @@
 # gatk-framework -- Create executable script
 
-version_base=3.5
-version=${version_base}-21
+version_base=3.6
+version=${version_base}-24
+
+# edit version in public/gatk-package-distribution/pom.xml
 
 all:
 	rm -f target/*.jar
